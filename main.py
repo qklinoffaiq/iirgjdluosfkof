@@ -4,7 +4,7 @@ import time
 import threading
 import json
 import os
-from config import group_token, group_id, cd_min, interval_sec, additional_text, admin_ids
+from config import group_token, group_id, cd_min, interval_sec, additional_texts, admin_ids
 
 data_file = 'data.json'
 
@@ -51,18 +51,20 @@ def save_data():
 
 def send_message(chat_id, text):
     try:
-        vk.messages.send(
+        response = vk.messages.send(
             peer_id=chat_id,
             message=text,
             random_id=0
         )
         print(f"[+] Сообщение успешно отправлено в чат {chat_id}")
+        return response
     except Exception as e:
         error_msg = str(e)
         if '[917]' in error_msg:
             print(f'\n[!] Ошибка доступа к чату {chat_id}. Сообщение НЕ отправлено, но чат сохранён.')
         else:
             print(f'\n[!] Произошла ошибка: {e}. Сообщение не отправлено, чат {chat_id} оставлен для повторной отправки.')
+        return None
 
 
 def broadcast_message():
@@ -74,10 +76,11 @@ def broadcast_message():
                 if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
                     try:
                         send_message(chat_id, message_text)
-                        if additional_text.strip():
-                            time.sleep(interval_sec)
-                            send_message(chat_id, additional_text)
                         time.sleep(interval_sec)
+                        for add_text in additional_texts:
+                            if add_text.strip():
+                                send_message(chat_id, add_text)
+                                time.sleep(interval_sec)
                     except Exception as e:
                         error_msg = str(e)
                         if '[917]' in error_msg:
@@ -114,34 +117,41 @@ while True:
                         send_message(chat_id, "❌ Использование команд бота разрешено только администраторам.")
                     continue
 
-                if text == '.аллид':
+                elif text == '.инфочат':
+                    help_text = (
+                        "📋 Информация о чате:\n"
+                        "\n"
+                        "🔹 Работает ли бот в рассылке: Да\n"
+                        ""
+                    )
+                    send_message(chat_id, help_text)
+                elif text == '.инфочат2':
+                    send_message(chat_id, "Команда .инфочат работает!")
+                elif text.startswith('.редтекст'):
+                    if user_id not in admin_ids:
+                        send_message(chat_id, "❌ Использование команды .редтекст разрешено только администраторам.")
+                        continue
                     try:
-                        # Получаем список бесед, где состоит бот
-                        response = vk.messages.getConversations(filter='all', extended=1, count=200)
-                        conversations = response.get('items', [])  # В новых версиях VK API 'items' содержит объекты бесед
-                        
-                        if not conversations:
-                            send_message(chat_id, "Бот не состоит ни в одной беседе.")
-                        else:
-                            result = "📋 Все чаты, где есть бот:\n\n"
-                            for conv in conversations:
-                                peer_id = conv.get('peer', {}).get('id')
-                                
-                                # Формируем ссылку только для бесед
-                                if peer_id and str(peer_id).startswith('2000000'):
-                                    link = f"https://vk.me/c/{peer_id - 2000000000}"
-                                    result += f"🔹 ID: {peer_id} — [Ссылка]({link})\n"
-                                
-                            send_message(chat_id, result)
-                    except Exception as e:
-                        send_message(chat_id, f"Ошибка при получении списка чатов: {str(e)}")
-                elif text.startswith('.текст'):
-                    try:
-                        message_text = text.split(' ', 1)[1]
+                        parts = text.split(' ', 2)
+                        if len(parts) < 3:
+                            send_message(chat_id, "Неверный формат команды. Используйте: .редтекст [номер] [текст]")
+                            continue
+                        try:
+                            idx = int(parts[1]) - 1
+                        except ValueError:
+                            send_message(chat_id, "Номер должен быть числом.")
+                            continue
+                        new_text = parts[2]
+                        if idx < 0:
+                            send_message(chat_id, "Номер должен быть положительным числом.")
+                            continue
+                        while len(additional_texts) <= idx:
+                            additional_texts.append("")
+                        additional_texts[idx] = new_text
                         save_data()
-                        send_message(chat_id, f"Текст для рассылки установлен: {message_text}")
-                    except IndexError:
-                        send_message(chat_id, "Неверный формат команды. Используйте: .текст [текст]")
+                        send_message(chat_id, f"Текст дополнительного сообщения #{idx + 1} установлен: {new_text}")
+                    except Exception as e:
+                        send_message(chat_id, "Ошибка при обработке команды.")
                 elif text == '.список':
                     total_chats = len(chat_ids)
                     chat_list = "\n".join(str(cid) for cid in chat_ids)
@@ -154,68 +164,53 @@ while True:
                     # В VK всегда peer_id = chat_id для бесед
                     send_message(chat_id, f"✅ ID этой беседы: {chat_id}")
                 elif text == '.инфо':
-                    send_message(chat_id, f"🔸 Настройки:\n\nКД между сообщениями: {cd_min} минут.\nИнтервал рассылки: {interval_sec} секунд.\nТекст рассылки:\n\n{message_text}\nДополнительное сообщение:\n\n{additional_text}")
+                    additional_text_display = "" if not additional_texts else additional_texts[0]
+                    send_message(chat_id, f"🔸 Настройки:\n\nКД между сообщениями: {cd_min} минут.\nИнтервал рассылки: {interval_sec} секунд.\nТекст рассылки:\n\n{message_text}\nДополнительное сообщение:\n\n{additional_text_display}")
+                elif text == '.допсписок':
+                    if not additional_texts:
+                        send_message(chat_id, "Дополнительных текстов пока нет.")
+                    else:
+                        text_list = "\n".join(f"#{i+1}: {text}" for i, text in enumerate(additional_texts))
+                        send_message(chat_id, f"Список дополнительных текстов:\n{text_list}")
                 elif text == '.хелп':
                     help_text = (
                         "📋 Доступные команды:\n"
                         "\n"
-                        "🔹 .текст [текст] — установить текст для рассылки\n"
-                        "🔹 .смс [текст] — отправить сообщение один раз во все чаты\n"
+                        "🔹 .редтекст [номер] [текст] — редактировать дополнительный текст под номером\n"
+                        "🔹 .допсписок — показать все дополнительные тексты\n"
+                        "🔹 .добтекст [текст] — добвить дополнительный текст\n"
                         "🔹 .рассылка — запустить рассылку\n"
                         "🔹 .список — показать количество чатов\n"
                         "🔹 .ид — узнать ID текущего чата\n"
-                        "🔹 .аллид — показать все чаты, где есть бот, с ID и ссылками\n"
                         "🔹 .инфо — показать текущие настройки\n"
                         "🔹 .пинг — проверить, работает ли бот\n"
                         "🔹 .хелп — показать это сообщение\n"
                         "🔹 .админ — установить текущий чат как административный\n"
                         "🔹 .уст — добавить текущий чат в список рассылки\n"
-                        "🔹 .узид [ссылка на чат] — узнать ID чата по ссылке\n"
+                        "🔹 .инфочат — получить информацию о чате\n"
                         "🔹 .добид [ID] — добавить чат в список по ID\n"
                         "🔹 .делид [ID] — удалить чат из списка по ID\n"
                         ""
                     )
                     send_message(chat_id, help_text)
                 elif text == '.пинг':
-                    send_message(chat_id, 'Бот работает в штатном режиме.')
-                elif text.startswith('.смс'):
+                    start_time = time.time()
+                    msg = send_message(chat_id, 'Проверка пинга...')
+                    end_time = time.time()
+                    ping_time = int((end_time - start_time) * 1000)
+                    send_message(chat_id, f'Пинг: {ping_time}ms')
+                elif text.startswith('.добтекст'):
+                    if user_id not in admin_ids:
+                        send_message(chat_id, "❌ Использование команды .добтекст разрешено только администраторам.")
+                        continue
                     try:
-                        sms_message = text.split(' ', 1)[1]
-                        send_message(chat_id, f"Текст для единоразовой рассылки установлен: {sms_message}")
-                        for target_chat_id in chat_ids:
-                            if target_chat_id != admin_chat:
-                                try:
-                                    send_message(target_chat_id, sms_message)
-                                    time.sleep(interval_sec)
-                                except Exception as e:
-                                    print(f'\n[!] Произошла ошибка: {e}\n[ID]: {chat_id}\n[*] Удаляем чат из списка для рассылки')
-                                    chat_ids.remove(target_chat_id)
-                                    save_data()
+                        new_text = text.split(' ', 1)[1]
+                        additional_texts.append(new_text)
+                        save_data()
+                        send_message(chat_id, f"Добавлен новый дополнительный текст: {new_text}")
                     except IndexError:
-                        send_message(chat_id, "Неверный формат команды. Используйте: .смс [текст]")
-                elif text.startswith('.узид '):
-                    # Извлекаем ссылку из команды
-                    link = text[len('.узид '):].strip()
-                    if 'vk.me/join/' in link:
-                        try:
-                            # Извлекаем ключ из ссылки (после /join/ и до =)
-                            join_key = link.split('vk.me/join/')[-1].split('=')[0]
-                            # В VK API нет прямого метода получения peer_id по ссылке-приглашению
-                            # Пользователю нужно вручную перейти по ссылке и использовать .ид в чате
-                            send_message(chat_id, f"Ссылка-приглашение: {link}\nИзвлечённый ключ: {join_key}\n⚠️ Чтобы узнать ID чата, перейдите по ссылке и используйте команду .ид в беседе.")
-                        except Exception as e:
-                            send_message(chat_id, f"Ошибка при обработке ссылки: {str(e)}")
-                    elif 'c=' in link:
-                        try:
-                            chat_id_from_link = link.split('c=')[1].split('&')[0].split(',')[0]
-                            if chat_id_from_link.isdigit():
-                                send_message(chat_id, f"ID чата из ссылки: {chat_id_from_link}")
-                            else:
-                                send_message(chat_id, "Не удалось извлечь ID из ссылки.")
-                        except Exception:
-                            send_message(chat_id, "Ошибка при извлечении ID из ссылки.")
-                    else:
-                        send_message(chat_id, "Ссылка не является ни ссылкой vk.me/join, ни содержит параметр 'c='." )
+                        send_message(chat_id, "Неверный формат команды. Используйте: .добтекст [текст]")
+                
                 elif text.startswith('.делид '):
                     try:
                         id_to_remove = int(text[len('.делид '):].strip())
