@@ -12,3 +12,9 @@ max_additional_texts = 5
 
 # Разделитель между дополнительными текстами при отправке
 additional_texts_separator = '\n\n'
+
+# Словарь для хранения дополнительных фото (индекс -> URL)
+additional_photos = {}
+
+# Основное фото для рассылки
+main_photo = None
