@@ -40,13 +40,17 @@ def save_data():
     with open(data_file, 'w', encoding='utf-8') as f:
         json.dump({'message_text': message_text, 'chat_ids': chat_ids, 'admin_chat': admin_chat}, f, ensure_ascii=False, indent=4)
 
-def send_message(chat_id, text):
+def send_message(chat_id, text, attachment=None):
     try:
-        response = vk.messages.send(
-            peer_id=chat_id,
-            message=text,
-            random_id=0
-        )
+        params = {
+            'peer_id': chat_id,
+            'random_id': 0
+        }
+        if text:
+            params['message'] = text
+        if attachment:
+            params['attachment'] = attachment
+        response = vk.messages.send(**params)
         print(f"[+] Сообщение успешно отправлено в чат {chat_id}")
         return response
     except Exception as e:
@@ -66,13 +70,20 @@ def broadcast_message():
             if admin_chat is not None and chat_id != admin_chat:
                 if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
                     try:
-                        send_message(chat_id, message_text)
+                        send_message(chat_id, message_text, attachment=main_photo if 'main_photo' in globals() else None)
                         time.sleep(interval_sec)
                         if additional_texts:
-                            add_text = additional_texts_separator.join(additional_texts).strip()
-                            if add_text:
-                                send_message(chat_id, add_text)
-                                time.sleep(interval_sec)
+                            for idx, add_text in enumerate(additional_texts):
+                                if add_text.strip():
+                                    attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
+                                    send_message(chat_id, add_text.strip(), attachment=attachment)
+                                    time.sleep(interval_sec)
+                                    # Разделяем дополнительные сообщения
+                                    if idx < len(additional_texts) - 1:
+                                        time.sleep(interval_sec)  # Дополнительная задержка между сообщениями
+                                    # Разделяем дополнительные сообщения
+                                    if idx < len(additional_texts) - 1:
+                                        time.sleep(interval_sec)  # Дополнительная задержка между сообщениями
                     except Exception as e:
                         error_msg = str(e)
                         if '[917]' in error_msg:
@@ -137,7 +148,7 @@ while True:
                         "🔹 ID отправителя: " + str(user_id) + "\n"
                         "🔹 Режим Long Poll: " + ("Включён" if longpoll_enabled else "Отключён или не настроен") + "\n"
                         "🔹 Текущий административный чат: " + (str(admin_chat) if admin_chat else "Не установлен") + "\n"
-                        "▫️ Версия бота: 1.0\n"
+                        "▫️ Версия бота: 1.3\n"
                     )
                     send_message(chat_id, help_text)
 
@@ -162,6 +173,16 @@ while True:
                         while len(additional_texts) <= idx:
                             additional_texts.append("")
                         additional_texts[idx] = new_text
+                        # Проверяем наличие фотографии в сообщении
+                        if 'attachments' in message and message['attachments']:
+                            attachment = message['attachments'][0]
+                            if attachment['type'] == 'photo':
+                                # Получаем фото с максимальным качеством
+                                sizes = attachment['photo']['sizes']
+                                max_size = max(sizes, key=lambda x: x['width'] * x['height'])
+                                if 'additional_photos' not in globals():
+                                    additional_photos = {}
+                                additional_photos[str(idx)] = max_size['url']
                         save_data()
                         send_message(chat_id, f"Текст дополнительного сообщения #{idx + 1} установлен: {new_text}")
                     except Exception as e:
@@ -178,11 +199,13 @@ while True:
                         send_message(admin_chat, "Рассылка запущена и таймер сброшен.")
                 elif text == '.тест':
                     # Отправляем сообщение только в текущий чат
-                    send_message(chat_id, message_text)
+                    send_message(chat_id, message_text, attachment=main_photo if 'main_photo' in globals() else None)
                     if additional_texts:
-                        add_text = additional_texts_separator.join(additional_texts).strip()
-                        if add_text:
-                            send_message(chat_id, add_text)
+                        for idx, additional_text in enumerate(additional_texts):
+                            if additional_text.strip():
+                                attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
+                                send_message(chat_id, additional_text, attachment=attachment)
+                                time.sleep(interval_sec)
                 elif text.startswith('.редоснтекст'):
                     if user_id != 574393629:
                         send_message(chat_id, "❌ Использование команды .редоснтекст разрешено только разработчику.")
@@ -190,8 +213,16 @@ while True:
                     try:
                         new_main_text = text.split(' ', 1)[1]
                         message_text = new_main_text
+                        # Проверяем, есть ли прикрепленные фото
+                        if 'attachments' in message and message['attachments']:
+                            attachment = message['attachments'][0]
+                            if attachment['type'] == 'photo':
+                                # Получаем фото с максимальным качеством
+                                sizes = attachment['photo']['sizes']
+                                max_size = max(sizes, key=lambda x: x['width'] * x['height'])
+                                main_photo = max_size['url']
                         save_data()
-                        send_message(chat_id, f"Основной текст рассылки изменён на:\n{new_main_text}")
+                        send_message(chat_id, f"Основной текст рассылки изменён на:\n{new_main_text}", attachment=main_photo if 'main_photo' in globals() else None)
                     except IndexError:
                         send_message(chat_id, "Неверный формат команды. Используйте: .редоснтекст [текст]")
                 elif text == '.ид':
@@ -249,6 +280,16 @@ while True:
                         new_text = text.split(' ', 1)[1]
                         if new_text not in additional_texts:
                             additional_texts.append(new_text)
+                            # Проверяем наличие фотографии в сообщении
+                            if 'attachments' in message and message['attachments']:
+                                attachment = message['attachments'][0]
+                                if attachment['type'] == 'photo':
+                                    # Получаем фото с максимальным качеством
+                                    sizes = attachment['photo']['sizes']
+                                    max_size = max(sizes, key=lambda x: x['width'] * x['height'])
+                                    if 'additional_photos' not in globals():
+                                        additional_photos = {}
+                                    additional_photos[str(len(additional_texts) - 1)] = max_size['url']
                             save_data()
                             send_message(chat_id, f"Добавлен новый дополнительный текст: {new_text}")
                     except IndexError:
