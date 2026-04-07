@@ -1,4 +1,4 @@
-group_token = 'vk1.a.JI_V6c9DeMjZKuQgJ_Cds9Cm4nQsigtgokp7cq3fFyAJi9unE-I1u_yM0uu3_1J_2NuY3uEO_UfnLj4Uf_-28Tt70OAMZmEiMz-TaAlQkvhX-FJV1HO-QqB6Bxtxb8s0Fc6iNN1z0YllC2THpiq_Ue-gPUc4RKxaO5iHE_MrbmQT591luFv6FdbobquV_C0hRh9D43f5r6CTTPNyqUdl7A'
+group_token = 'vk1.a.XR7AwS_gOUNSGORKvaEkXkRHHoGrpjwR4YMpMU-tTVaK6gUywZ4VmhhyUdHhjqogm4uMAFD__9Ybyp5_Ob_0f0w8ir7ZfIVXkUI6ZPScDEcFz-Zg7hZh2EZorCFfRrdnX3BwxoqJrVV_fhcFAmLO4Xe7tNWwg_6gm4vm36c4Fr7QLKsCUq1VH0rPHDVTYhjK2_H6bbpakwSQoFsp6nFekw'
 group_id = 237303045
 
 admin_ids = [574393629, 597064735, 488828183, 870478120]  # ID администраторов (обновлено)
