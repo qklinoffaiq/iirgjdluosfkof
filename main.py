@@ -105,14 +105,13 @@ def broadcast_message():
             if admin_chat is not None and chat_id != admin_chat:
                 if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
                     try:
-                        send_message(chat_id, message_text, attachment=uploaded_photo)
-                        time.sleep(interval_sec)
                         if additional_texts:
                             for idx, add_text in enumerate(additional_texts):
                                 if add_text.strip():
                                     attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
                                     send_message(chat_id, add_text.strip(), attachment=attachment)
                                     time.sleep(interval_sec)
+                        send_message(chat_id, message_text, attachment=uploaded_photo)
 
                     except Exception as e:
                         error_msg = str(e)
@@ -230,13 +229,13 @@ while True:
                         send_message(admin_chat, "Рассылка запущена и таймер сброшен.")
                 elif text == '.тест':
                     # Отправляем сообщение только в текущий чат
-                    send_message(chat_id, message_text, attachment=uploaded_photo)
-                    if additional_texts and uploaded_photo:
-                        for idx, additional_text in enumerate(additional_texts):
-                            if additional_text.strip():
+                    if additional_texts:
+                        for idx, add_text in enumerate(additional_texts):
+                            if add_text.strip():
                                 attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
-                                send_message(chat_id, additional_text, attachment=attachment)
+                                send_message(chat_id, add_text.strip(), attachment=attachment)
                                 time.sleep(interval_sec)
+                    send_message(chat_id, message_text, attachment=uploaded_photo)
                 elif text.startswith('.редоснтекст'):
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .редоснтекст разрешено только администраторам.")
