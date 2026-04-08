@@ -4,17 +4,28 @@ import time
 import threading
 import json
 import os
-from config import group_token, group_id, cd_min, interval_sec, additional_texts, admin_ids, additional_texts_separator
+from config import MESSAGE_CONFIG, admin_ids, main_photo
+
+from config import group_token
+from config import group_id
+cd_min = 60  # Минимальное время между сообщениями в минутах
+interval_sec = 1  # Интервал между сообщениями в секундах
+additional_texts = []  # Дополнительные тексты
+additional_texts_separator = "\n\n"  # Разделитель для дополнительных текстов
+additional_photos = {}  # Словарь с URL дополнительных фото
+# main_photo = None  # Основное фото (URL или путь)
+
+# Загружаем основное фото из конфига
+# main_photo определяется в импортированных переменных выше
 
 data_file = 'data.json'
 
-if os.path.exists(data_file):
-    with open(data_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        message_text = data.get('message_text', "Текст для рассылки")
-        chat_ids = data.get('chat_ids', [])
-    admin_chat = data.get('admin_chat', None)
-else:
+try:
+    message_text = MESSAGE_CONFIG['text']
+    chat_ids = MESSAGE_CONFIG['chat_ids']
+    admin_chat = MESSAGE_CONFIG['admin_chat']
+except Exception as e:
+    print(f"[!] Ошибка загрузки конфигурации: {e}")
     message_text = "Текст для рассылки"
     chat_ids = []
     admin_chat = None
@@ -23,6 +34,9 @@ else:
 vk_session = vk_api.VkApi(token=group_token)
 vk = vk_session.get_api()
 
+# Инициализируем переменную для хранения загруженного фото
+uploaded_photo = None
+
 # Попытка создать Long Poll, но игнорировать ошибку, если Long Poll не включен
 try:
     longpoll = VkBotLongPoll(vk_session, group_id)
@@ -30,6 +44,27 @@ try:
 except vk_api.exceptions.ApiError as e:
     print(f"[!] Ошибка инициализации Long Poll: {e}. Возможно, в настройках группы не включен Long Poll API.")
     longpoll_enabled = False
+
+# Функция для загрузки фото в ВКонтакте
+def upload_photo_to_vk(photo_path):
+    if not os.path.exists(photo_path):
+        print(f"[!] Файл фото не найден: {photo_path}")
+        return None
+    try:
+        upload = vk_api.VkUpload(vk_session)
+        photo = upload.photo_messages(photo_path)[0]
+        attachment = f"photo{photo['owner_id']}_{photo['id']}"
+        print(f"[+] Фото успешно загружено: {attachment}")
+        return attachment
+    except Exception as e:
+        print(f"[!] Ошибка загрузки фото в ВК: {e}")
+        return None
+
+# Загружаем фото при старте, если путь указан
+if main_photo:
+    uploaded_photo = upload_photo_to_vk(main_photo)
+    if not uploaded_photo:
+        print("[!] Не удалось загрузить фото, будет отправляться без вложения.")
 
 reset_event = threading.Event()
 
@@ -51,7 +86,7 @@ def send_message(chat_id, text, attachment=None):
         if attachment:
             params['attachment'] = attachment
         response = vk.messages.send(**params)
-        print(f"[+] Сообщение успешно отправлено в чат {chat_id}")
+        # print(f"[+] Сообщение успешно отправлено в чат {chat_id}")  # временно отключено, чтобы избежать дублирования при отладке
         return response
     except Exception as e:
         error_msg = str(e)
@@ -70,7 +105,7 @@ def broadcast_message():
             if admin_chat is not None and chat_id != admin_chat:
                 if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
                     try:
-                        send_message(chat_id, message_text, attachment=main_photo if 'main_photo' in globals() else None)
+                        send_message(chat_id, message_text, attachment=uploaded_photo)
                         time.sleep(interval_sec)
                         if additional_texts:
                             for idx, add_text in enumerate(additional_texts):
@@ -78,12 +113,7 @@ def broadcast_message():
                                     attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
                                     send_message(chat_id, add_text.strip(), attachment=attachment)
                                     time.sleep(interval_sec)
-                                    # Разделяем дополнительные сообщения
-                                    if idx < len(additional_texts) - 1:
-                                        time.sleep(interval_sec)  # Дополнительная задержка между сообщениями
-                                    # Разделяем дополнительные сообщения
-                                    if idx < len(additional_texts) - 1:
-                                        time.sleep(interval_sec)  # Дополнительная задержка между сообщениями
+
                     except Exception as e:
                         error_msg = str(e)
                         if '[917]' in error_msg:
@@ -173,7 +203,7 @@ while True:
                         while len(additional_texts) <= idx:
                             additional_texts.append("")
                         additional_texts[idx] = new_text
-                        # Проверяем наличие фотографии в сообщении
+                        # Проверяем наличие вложений в сообщении
                         if 'attachments' in message and message['attachments']:
                             attachment = message['attachments'][0]
                             if attachment['type'] == 'photo':
@@ -184,7 +214,8 @@ while True:
                                     additional_photos = {}
                                 additional_photos[str(idx)] = max_size['url']
                         save_data()
-                        send_message(chat_id, f"Текст дополнительного сообщения #{idx + 1} установлен: {new_text}")
+                        # Отправляем только ОДНО сообщение с вложением
+                        send_message(chat_id, f"{new_text}", attachment=additional_photos.get(str(idx)) if 'additional_photos' in globals() and str(idx) in additional_photos else None)
                     except Exception as e:
                         send_message(chat_id, "Ошибка при обработке команды.")
                 elif text == '.список':
@@ -199,20 +230,21 @@ while True:
                         send_message(admin_chat, "Рассылка запущена и таймер сброшен.")
                 elif text == '.тест':
                     # Отправляем сообщение только в текущий чат
-                    send_message(chat_id, message_text, attachment=main_photo if 'main_photo' in globals() else None)
-                    if additional_texts:
+                    send_message(chat_id, message_text, attachment=uploaded_photo)
+                    if additional_texts and uploaded_photo:
                         for idx, additional_text in enumerate(additional_texts):
                             if additional_text.strip():
                                 attachment = additional_photos.get(str(idx)) if 'additional_photos' in globals() else None
                                 send_message(chat_id, additional_text, attachment=attachment)
                                 time.sleep(interval_sec)
                 elif text.startswith('.редоснтекст'):
-                    if user_id != 574393629:
-                        send_message(chat_id, "❌ Использование команды .редоснтекст разрешено только разработчику.")
+                    if user_id not in admin_ids:
+                        send_message(chat_id, "❌ Использование команды .редоснтекст разрешено только администраторам.")
                         continue
                     try:
-                        new_main_text = text.split(' ', 1)[1]
+                        new_main_text = text.split(' ', 1)[1] if ' ' in text else ''
                         message_text = new_main_text
+                        
                         # Проверяем, есть ли прикрепленные фото
                         if 'attachments' in message and message['attachments']:
                             attachment = message['attachments'][0]
@@ -221,9 +253,11 @@ while True:
                                 sizes = attachment['photo']['sizes']
                                 max_size = max(sizes, key=lambda x: x['width'] * x['height'])
                                 main_photo = max_size['url']
+                        
                         save_data()
-                        send_message(chat_id, f"Основной текст рассылки изменён на:\n{new_main_text}", attachment=main_photo if 'main_photo' in globals() else None)
-                    except IndexError:
+                        # Отправляем только ОДНО сообщение с вложением
+                        send_message(chat_id, new_main_text, attachment=uploaded_photo)
+                    except (IndexError, ValueError):
                         send_message(chat_id, "Неверный формат команды. Используйте: .редоснтекст [текст]")
                 elif text == '.ид':
                     send_message(chat_id, f"✅ ID этой беседы: {chat_id}")
@@ -291,11 +325,14 @@ while True:
                                         additional_photos = {}
                                     additional_photos[str(len(additional_texts) - 1)] = max_size['url']
                             save_data()
-                            send_message(chat_id, f"Добавлен новый дополнительный текст: {new_text}")
+                            # Отправляем сообщение с вложением, если оно есть
+                            attachment_url = additional_photos.get(str(len(additional_texts) - 1)) if 'additional_photos' in globals() else None
+                            send_message(chat_id, f"{new_text}", attachment=attachment_url)
                     except IndexError:
                         send_message(chat_id, "Неверный формат команды. Используйте: .добтекст [текст]")
                 elif text.startswith('.удтекст'):
                     if user_id not in admin_ids:
+                        
                         send_message(chat_id, "❌ Использование команды .удтекст разрешено только администраторам.")
                         continue
                     try:
@@ -369,7 +406,7 @@ while True:
                     if admin_chat is None:
                         send_message(chat_id, "Администратор не установлен.")
                     elif admin_chat != chat_id:
-                        send_message(chat_id, "❌ Эта команда доступна только из административного чата.")
+                        send_message(chat_id, "❌ Эта команда д��ступна только из административного чата.")
                     else:
                         if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
                             if chat_id not in chat_ids:
