@@ -8,8 +8,8 @@ from config import MESSAGE_CONFIG, admin_ids, main_photo
 
 from config import group_token
 from config import group_id
-cd_min = 60  # Минимальное время между сообщениями в минутах
-interval_sec = 1  # Интервал между сообщениями в секундах
+cd_min = 10  # Минимальное время между сообщениями в минутах
+interval_sec = 0.01  # Интервал между сообщениями в секундах
 additional_texts = []  # Дополнительные тексты
 additional_texts_separator = "\n\n"  # Разделитель для дополнительных текстов
 additional_photos = {}  # Словарь с URL дополнительных фото
