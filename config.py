@@ -1,11 +1,11 @@
 from datetime import datetime
 
-group_token = "vk1.a.twqgZ21nWfOXvZubGQ7UuWAQQa7WtxOAca0rVZwUN27NdjL85MpvKUPomgH8TVjCNdkmiC_EtY4-IcMcl2W4--4UYlkGiU3mHAJtXrmFKAZCSJQf0vCgFcC-BqSjEOj0qldjKU6t8i_pea4CREkhUakoCEzVlnsAZZ25Ehk3trsLifRTmzb5rjv5dDCl3MZaYTe3UxMj0I8Gs5x6KzvfeA"
+group_token = "vk1.a.uXjX4k_KL5OnJHsf5sa1wxeY-EC4hAlbGezjuhI7lFhyB6VPECGS58XIeoPTtnpICMLWNz00yb8orFHUh0jOXmCJetD3KOJPQwckBLJ9ynCwzlQNP5JC0j1N4Yee2qrWu2IjslTnc-lgrq2OfVDfmQgkVQTUR0nImLazws9280jQ5N0d3lnDetTxAzuZan0iSqj5lXfj3L3uweFoyHGf0w"
 group_id = 237303045
 cd_min = 10
 interval_sec = 0.01
 additional_texts = []
-admin_ids = [574393629, 870478120, 488828183]
+admin_ids = [574393629, 870478120, 488828183, 597064735]
 additional_texts_separator = "\n\n"
 additional_photos = {}
 main_photo = "8ZKlMfNltv9Bh6BCr7aQdTQyO4fVClMV95oSp7AhBm01M1kT_pzCGANsQVr6QDT0PURwUuFWVJfZ_jMFCBNb4j2r.jpg"
