@@ -15,6 +15,8 @@ additional_texts = []  # Дополнительные тексты
 additional_texts_separator = "\n\n"  # Разделитель для дополнительных текстов
 additional_photos_by_text = {}  # Словарь для хранения вложений по текстам
 photo_wait_queue = {}           # Очередь ожидания фото от пользователей
+pending_delid_requests = {}      # Очередь ожидания для команды .делид
+pending_dobid_requests = {}      # Очередь ожидания для команды .добид
 
 # Загружаем основное фото из конфига
 # main_photo определяется в импортированных переменных выше
@@ -23,7 +25,7 @@ data_file = 'data.json'
 
 try:
     message_text = MESSAGE_CONFIG['text']
-    chat_ids = MESSAGE_CONFIG['chat_ids']
+    chat_ids = MESSAGE_CONFIG['chat_ids'][:]
     admin_chat = MESSAGE_CONFIG['admin_chat']
 except Exception as e:
     print(f"[!] Ошибка загрузки конфигурации: {e}")
@@ -83,6 +85,18 @@ if main_photo:
     if not uploaded_photo:
         print("[!] Не удалось загрузить фото, будет отправляться без вложения.")
 
+import logging
+
+# Настройка логирования в файл с меткой времени
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler('bot.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
 reset_event = threading.Event()
 
 def save_data():
@@ -102,43 +116,87 @@ def send_message(chat_id, text, attachment=None):
             params['message'] = text
         if attachment:
             params['attachment'] = attachment
+        
+        # Попытка отправить сообщение через API ВКонтакте
         response = vk.messages.send(**params)
-        # print(f"[+] Сообщение успешно отправлено в чат {chat_id}")  # временно отключено, чтобы избежать дублирования при отладке
+        
+        # Логирование успешной отправки
+        logging.info(f"Chat {chat_id}: Сообщение отправлено.")
         return response
+        
     except Exception as e:
         error_msg = str(e)
-        if '[917]' in error_msg:
-            print(f'\n[!] Ошибка доступа к чату {chat_id}. Сообщение НЕ отправлено, но чат сохранён.')
+        
+        # Обработка ошибки: пользователь исключён из беседы
+        if 'the user was kicked out of the conversation' in error_msg:
+            # Удаляем chat_id из списка активных чатов
+            if chat_id in chat_ids:
+                chat_ids.remove(chat_id)
+                save_data()  # Сохраняем изменения в data.json
+            # Логируем информацию
+            logging.info(f"Chat {chat_id}: Участник исключён из беседы. Чат удалён из списка рассылки.")
+            return None
+        
+        # Обработка ошибки доступа к чату (например, потеря прав администратора)
+        elif 'Ошибка доступа к чату' in error_msg or 'You don\'t have access to this chat' in error_msg:
+            # НЕ удаляем chat_id, только останавливаем рассылку
+            logging.warning(f"Chat {chat_id}: Ошибка доступа. Рассылка приостановлена.")
+            # Сохраняем состояние — можно возобновить позже вручную или по таймеру
+            return 'access_error'  # Специальный флаг для остановки рассылки
+        
+        # Обработка ошибки ограничения на запись в чат
+        elif 'You are restricted to write to a chat' in error_msg or 'code 983' in error_msg:
+            # Удаляем chat_id из списка активных чатов
+            if chat_id in chat_ids:
+                chat_ids.remove(chat_id)
+                save_data()  # Сохраняем изменения в data.json
+            # Логируем информацию
+            logging.info(f"Chat {chat_id}: Ограничение на запись в чат. Чат удалён из списка рассылки.")
+            return None
+        
+        # Другие ошибки
         else:
-            print(f'\n[!] Произошла ошибка: {e}. Сообщение не отправлено, чат {chat_id} оставлен для повторной отправки.')
-        return None
+            print(f"[ERROR] Chat {chat_id}: Произошла ошибка: {e}")
+            return None
 
 
 def broadcast_message():
     while True:
         reset_event.wait(timeout=cd_min * 60)
         reset_event.clear()
-        for chat_id in chat_ids:
+        
+        # Создаём локальную копию списка чатов для безопасной итерации
+        current_chat_ids = chat_ids.copy()
+        
+        for chat_id in current_chat_ids:
             if admin_chat is not None and chat_id != admin_chat:
                 if len(str(chat_id)) == 10 and str(chat_id).startswith('2'):
-                    try:
-                        if additional_texts:
-                            for idx, add_text in enumerate(additional_texts):
-                                if add_text.strip():
-                                    idx_str = str(idx)
-                                    attachments = additional_photos_by_text.get(idx_str, [])
-                                    send_message(chat_id, add_text.strip(), attachment=','.join(attachments) if attachments else None)
-                                    time.sleep(interval_sec)
-                        send_message(chat_id, message_text, attachment=uploaded_photo)
-
-                    except Exception as e:
-                        error_msg = str(e)
-                        if '[917]' in error_msg:
-                            print(f'\n[!] Ошибка доступа к чату {chat_id}. Сообщение НЕ отправлено, но чат сохранён.')
-                        else:
-                            print(f'\n[!] Произошла ошибка: {e}. Сообщение не отправлено, чат {chat_id} оставлен для повторной отправки.')
+                    
+                    # Отправка дополнительных текстов
+                    if additional_texts:
+                        for idx, add_text in enumerate(additional_texts):
+                            if add_text.strip():
+                                idx_str = str(idx)
+                                attachments = additional_photos_by_text.get(idx_str, [])
+                                result = send_message(chat_id, add_text.strip(), attachment=','.join(attachments) if attachments else None)
+                                
+                                # Проверяем, нужно ли остановить рассылку
+                                if result == 'access_error':
+                                    print("[INFO] Рассылка остановлена из-за ошибки доступа.")
+                                    break
+                                
+                                time.sleep(interval_sec)
+                    
+                    # Отправка основного сообщения
+                    result = send_message(chat_id, message_text, attachment=uploaded_photo)
+                    
+                    # Проверяем, нужно ли остановить рассылку после основного сообщения
+                    if result == 'access_error':
+                        print("[INFO] Рассылка остановлена из-за ошибки доступа.")
+                        break
+                    
                 else:
-                    print(f'\n[!] Предупреждение: ID {chat_id} не является беседой. Сообщение не отправлено.')
+                    print(f"[WARNING] Chat {chat_id}: Некорректный ID чата. Пропущено.")
 
 
 if 'broadcast_thread' not in globals() or not broadcast_thread.is_alive():
@@ -188,6 +246,9 @@ while True:
                             continue
 
                 elif text == '.инфочат':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     help_text = (
                         "📋 Информация о чате:\n"
                         "\n"
@@ -200,6 +261,9 @@ while True:
                     send_message(chat_id, help_text)
 
                 elif text.startswith('.редтекст'):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .редтекст разрешено только администраторам.")
                         continue
@@ -239,16 +303,25 @@ while True:
                     except Exception as e:
                         send_message(chat_id, "Ошибка при обработке команды.")
                 elif text == '.список':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     total_chats = len(chat_ids)
                     chat_list = "\n".join(str(cid) for cid in chat_ids if cid != admin_chat)
                     send_message(chat_id, f"Количество чатов для рассылки: {total_chats}\nСписок чатов:\n{chat_list}")
                 elif text == '.рассылка':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if admin_chat:
                         if reset_event.is_set():
                             reset_event.clear()
                         reset_event.set()
                         send_message(admin_chat, "Рассылка запущена и таймер сброшен.")
                 elif text == '.тест':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     # Отправляем сообщение только в текущий чат
                     if additional_texts:
                         for idx, add_text in enumerate(additional_texts):
@@ -259,6 +332,9 @@ while True:
                                 time.sleep(interval_sec)
                     send_message(chat_id, message_text, attachment=uploaded_photo)
                 elif text.startswith('.редоснтекст'):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .редоснтекст разрешено только администраторам.")
                         continue
@@ -281,11 +357,20 @@ while True:
                     except (IndexError, ValueError):
                         send_message(chat_id, "Неверный формат команды. Используйте: .редоснтекст [текст]")
                 elif text == '.ид':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     send_message(chat_id, f"✅ ID этой беседы: {chat_id}")
                 elif text == '.инфо':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     additional_text_display = "" if not additional_texts else additional_texts_separator.join(additional_texts).strip()
                     send_message(chat_id, f"🔸 Настройки:\n\nКД между сообщениями: {cd_min} минут.\nИнтервал рассылки: {interval_sec} секунд.\nТекст рассылки:\n\n{message_text}\nДополнительное сообщение:\n\n{additional_text_display}")
                 elif text == '.допсписок':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     current_texts = [text for text in additional_texts if text.strip()]
                     if not current_texts:
                         send_message(chat_id, "Дополнительных текстов пока нет.")
@@ -330,6 +415,9 @@ while True:
                     ping_time = int((end_time - start_time) * 1000)
                     send_message(chat_id, f'Пинг: {ping_time}ms')
                 elif text.startswith('.добтекст'):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .добтекст разрешено только администраторам.")
                         continue
@@ -357,6 +445,9 @@ while True:
                     except IndexError:
                         send_message(chat_id, "Неверный формат команды. Используйте: .добтекст [текст]")
                 elif text.startswith('.удтекст'):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         
                         send_message(chat_id, "❌ Использование команды .удтекст разрешено только администраторам.")
@@ -391,34 +482,114 @@ while True:
                     except IndexError:
                         send_message(chat_id, "Укажите номер текста для удаления. Пример: .удтекст 1")
                 
-                elif text.startswith('.делид '):
+                elif text == '.делид':
                     if chat_id != admin_chat:
                         send_message(chat_id, "❌ Команда доступна только в админ-чате.")
-                    else:
-                        try:
-                            id_to_remove = int(text[len('.делид '):].strip())
-                            if id_to_remove in chat_ids:
-                                chat_ids.remove(id_to_remove)
-                                save_data()
-                                send_message(chat_id, f"Чат с ID {id_to_remove} удалён из списка.")
-                            else:
-                                send_message(chat_id, f"Чат с ID {id_to_remove} не найден в списке.")
-                        except ValueError:
-                            send_message(chat_id, "Неверный формат ID. Используйте: .делид [числовой ID]")
-                elif text.startswith('.добид '):
+                        continue
+                    if user_id not in admin_ids:
+                        send_message(chat_id, "❌ Использование команды .делид разрешено только администраторам.")
+                        continue
+                    if chat_id in pending_delid_requests:
+                        send_message(chat_id, "🕒 Вы уже начали команду .делид. Пожалуйста, завершите её.")
+                        continue
+                    # Активируем ожидание количества
+                    pending_delid_requests[chat_id] = {'step': 'waiting_count', 'admin_id': user_id}
+                    send_message(chat_id, "🔢 Сколько чатов вы хотите удалить с конца списка? Пожалуйста, введите число.")
+
+                # Обработка ввода количества для команды .делид
+                elif chat_id in pending_delid_requests and pending_delid_requests[chat_id]['step'] == 'waiting_count':
+                    if user_id != pending_delid_requests[chat_id]['admin_id']:
+                        send_message(chat_id, "❌ Эта команда была начата другим администратором.")
+                        continue
                     try:
-                        id_to_add = int(text[len('.добид '):].strip())
-                        if id_to_add not in chat_ids:
-                            if len(str(id_to_add)) == 10 and str(id_to_add).startswith('2'):
-                                chat_ids.append(id_to_add)
-                                save_data()
-                                send_message(chat_id, f"Чат с ID {id_to_add} добавлен в список.")
-                            else:
-                                send_message(chat_id, "Неверный формат ID чата. ID должен быть 10-значным числом, начинающимся с '2'.")
-                        else:
-                            send_message(chat_id, f"Чат с ID {id_to_add} уже в списке.")
+                        count = int(text.strip())
+                        if count <= 0:
+                            send_message(chat_id, "❌ Ошибка: введите положительное число.")
+                            continue
+                        
+                        # Фильтруем только ID бот-чатов из глобального списка
+                        bot_chat_ids = [cid for cid in chat_ids if str(cid).startswith('2000000')]
+                        
+                        if count > len(bot_chat_ids):
+                            send_message(chat_id, f"❌ Невозможно удалить {count} чатов. В списке только {len(bot_chat_ids)} чатов.")
+                            continue
+                        
+                        # Получаем последние N чатов с конца списка
+                        ids_to_remove = bot_chat_ids[-count:]
+                        
+                        # Удаляем из глобального списка
+                        for cid in ids_to_remove:
+                            if cid in chat_ids:
+                                chat_ids.remove(cid)
+                        
+                        save_data()
+                        
+                        send_message(chat_id, f"✅ Успешно удалено {len(ids_to_remove)} чатов с конца списка.")
                     except ValueError:
-                        send_message(chat_id, "Неверный формат ID. Используйте: .добид [числовой ID]")
+                        send_message(chat_id, "❌ Ошибка: введите корректное число.")
+                    finally:
+                        # Завершаем сессию
+                        if chat_id in pending_delid_requests:
+                            del pending_delid_requests[chat_id]
+
+                elif text == '.добид':
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Команда доступна только в админ-чате.")
+                        continue
+                    if user_id not in admin_ids:
+                        send_message(chat_id, "❌ Использование команды .добид разрешено только администраторам.")
+                        continue
+                    if chat_id in pending_dobid_requests:
+                        send_message(chat_id, "🕒 Вы уже начали команду .добид. Пожалуйста, завершите её.")
+                        continue
+                    # Активируем ожидание числа
+                    pending_dobid_requests[chat_id] = {'step': 'waiting_count', 'admin_id': user_id}
+                    send_message(chat_id, "🔢 Сколько чатов вы хотите добавить? Пожалуйста, введите число.")
+
+                # Обработка ввода числа для команды .добид
+                elif chat_id in pending_dobid_requests and pending_dobid_requests[chat_id]['step'] == 'waiting_count':
+                    if user_id != pending_dobid_requests[chat_id]['admin_id']:
+                        send_message(chat_id, "❌ Эта команда была начата другим администратором.")
+                        continue
+                    try:
+                        n = int(text.strip())
+                        if n <= 0:
+                            send_message(chat_id, "❌ Ошибка: введите положительное число.")
+                            continue
+                        if n > 10000:
+                            send_message(chat_id, "⚠️ Максимальное количество за раз — 10000.")
+                            continue
+                        # Используем только последнее значение из chat_ids как базу
+                        if chat_ids:
+                            # Фильтруем только ID бот-чатов (начинающиеся с 2000000)
+                            bot_chat_ids = [cid for cid in chat_ids if str(cid).startswith('2000000')]
+                            if bot_chat_ids:
+                                last_id = max(bot_chat_ids)
+                                start_id = last_id + 1
+                            else:
+                                start_id = 2000000001
+                        else:
+                            start_id = 2000000001
+                        
+                        new_ids = []
+                        for i in range(n):
+                            new_id = start_id + i
+                            # Проверяем, что ID не существует в текущем списке
+                            if new_id not in chat_ids:
+                                new_ids.append(new_id)
+                        # Обновляем глобальные chat_ids
+                        chat_ids.extend(new_ids)
+                        save_data()
+                        if new_ids:
+                            send_message(chat_id, f"✅ Успешно добавлено {len(new_ids)} чатов: от {new_ids[0]} до {new_ids[-1]}")
+                        else:
+                            send_message(chat_id, "✅ Все запрошенные ID уже существуют.")
+                    except ValueError:
+                        send_message(chat_id, "❌ Ошибка: введите корректное число.")
+                    finally:
+                        # Завершаем сессию
+                        if chat_id in pending_dobid_requests:
+                            del pending_dobid_requests[chat_id]
                 elif text == '.админ':
                     if user_id in admin_ids:
                         if admin_chat == chat_id:
@@ -447,6 +618,9 @@ while True:
                         else:
                             send_message(chat_id, "Невозможно добавить этот чат: это не беседа.")
                 elif text.startswith('.добфото '):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .добфото разрешено только администраторам.")
                         continue
@@ -472,6 +646,9 @@ while True:
                     except ValueError:
                         send_message(chat_id, "Номер должен быть числом. Пример: .добфото 1")
                 elif text.startswith('.удфото '):
+                    if chat_id != admin_chat:
+                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
+                        continue
                     if user_id not in admin_ids:
                         send_message(chat_id, "❌ Использование команды .удфото разрешено только администраторам.")
                         continue
