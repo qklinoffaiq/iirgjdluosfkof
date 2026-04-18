@@ -5,15 +5,15 @@ group_id = 237303045
 cd_min = 10
 interval_sec = 0.01
 additional_texts = []
-admin_ids = [574393629, 870478120, 488828183, 597064735]
+admin_ids = [574393629]
 additional_texts_separator = "\n\n"
 additional_photos = {}
-main_photo = "8ZKlMfNltv9Bh6BCr7aQdTQyO4fVClMV95oSp7AhBm01M1kT_pzCGANsQVr6QDT0PURwUuFWVJfZ_jMFCBNb4j2r.jpg"
+main_photo = "photos/main_photo.jpg"
 
 # Конфигурация для отправки сообщений
 MESSAGE_CONFIG = {
-    'text': "@all Продвижение и раскрутка ваших соцсетей и каналов с гарантией безопасности!\n\n🔐 Playerok обеспечивает максимальную защиту ваших данных и финансовую безопасность при покупке любых услуг продвижения.\n\n📈 Продвигайте ваши аккаунты эффективно:\n\n- Telegram: подписки & premium, реакции & просмотры, быстрый рост канала\n- Steam: вишлист & лайки, просмотры & комментарии\n- Instagram: подписчики, просмотры & лайки\n- VK: быстрые подписчики (1000+/день), лайки & репосты mix, универсальные лайки\n- TikTok: подписчики, лайки & просмотры\n- MAX: подписчики в группу, запуск бота, репосты, просмотры на пост, реакции\n- Голоса в опросах (VK, Telegram)\n\nБезопасность, скорость и качество — ваш путь к успеху! Переходите по ссылке и начните продвижение прямо сейчас! ✨\n\nhttps://playerok.com/profile/KlinofNanoKrutka",
-    'photo_path': "8ZKlMfNltv9Bh6BCr7aQdTQyO4fVClMV95oSp7AhBm01M1kT_pzCGANsQVr6QDT0PURwUuFWVJfZ_jMFCBNb4j2r.jpg",
+    'text': ".",
+    'photo_path': "photos/main_photo.jpg",
     'chat_ids': [
         2000000004,
         2000000008,
