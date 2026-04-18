@@ -157,16 +157,30 @@ main_photo = 'photos/main_photo.jpg'
 
 data_file = 'data.json'
 
+data_file = 'data.json'
+
 try:
-    message_text = MESSAGE_CONFIG['text']
-    chat_ids = MESSAGE_CONFIG['chat_ids'][:]
-    admin_chat = MESSAGE_CONFIG['admin_chat']
+    if os.path.exists(data_file):
+        with open(data_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        message_text = data.get('message_text', "Текст для рассылки")
+        chat_ids = data.get('chat_ids', [])[:]
+        admin_chat = data.get('admin_chat', None)
+        additional_texts = data.get('additional_texts', [])
+        additional_photos_by_text = data.get('additional_photos_by_text', {})
+    else:
+        message_text = "Текст для рассылки"
+        chat_ids = []
+        admin_chat = None
+        additional_texts = []
+        additional_photos_by_text = {}
 except Exception as e:
-    print(f"[!] Ошибка загрузки конфигурации: {e}")
+    print(f"[!] Ошибка загрузки data.json: {e}. Используются значения по умолчанию.")
     message_text = "Текст для рассылки"
     chat_ids = []
     admin_chat = None
-
+    additional_texts = []
+    additional_photos_by_text = {}
 
 vk_session = vk_api.VkApi(token=group_token)
 vk = vk_session.get_api()
@@ -226,8 +240,17 @@ def save_data():
     # Исключаем admin_chat из списка, если он там есть
     if admin_chat in chat_ids:
         chat_ids.remove(admin_chat)
-    with open(data_file, 'w', encoding='utf-8') as f:
-        json.dump({'message_text': message_text, 'chat_ids': chat_ids, 'admin_chat': admin_chat, 'additional_photos_by_text': additional_photos_by_text}, f, ensure_ascii=False, indent=4)
+    try:
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'message_text': message_text,
+                'chat_ids': chat_ids,
+                'admin_chat': admin_chat,
+                'additional_texts': additional_texts,
+                'additional_photos_by_text': additional_photos_by_text
+            }, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"[!] Ошибка сохранения data.json: {e}")
 
 def send_message(chat_id, text, attachment=None):
     # Максимальная длина сообщения для ВКонтакте (с запасом)
@@ -1054,9 +1077,6 @@ while True:
                         if chat_id in pending_dobid_requests:
                             del pending_dobid_requests[chat_id]
                 elif text == '.админчат':
-                    if chat_id != admin_chat:
-                        send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
-                        continue
                     if not has_permission(user_id, 'dev'):
                         send_message(chat_id, "❌ У вас нет прав на выполнение этой команды.")
                         continue
