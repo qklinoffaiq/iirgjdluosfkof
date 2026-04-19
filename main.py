@@ -791,7 +791,7 @@ while True:
                                 time.sleep(interval_sec)
                     send_message(chat_id, message_text, attachment=uploaded_photo)
                     update_user_stats(user_id, 'command')
-                elif text.startswith('.редоснтекст'):
+                elif text.startswith('.') and text.split()[0] == '.редоснтекст':
                     if chat_id != admin_chat:
                         send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
                         continue
@@ -1136,7 +1136,7 @@ while True:
                                 send_message(chat_id, "❌ Этот чат уже в списке рассылки.")
                         else:
                             send_message(chat_id, "Невозможно добавить этот чат: это не беседа.")
-                elif text.startswith('.добфото '):
+                elif text.startswith('.') and text.split()[0] == '.добфото':
                     if chat_id != admin_chat:
                         send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
                         continue
@@ -1156,17 +1156,39 @@ while True:
                         if text_idx >= len(additional_texts) or text_idx < 0:
                             send_message(chat_id, f"Текст с номером {text_number} не существует.")
                             continue
-                        # Переводим пользователя в режим ожидания фото
-                        photo_wait_queue[user_id] = {
-                            'text_idx': str(text_idx),
-                            'expires': time.time() + 60
-                        }
-                        send_message(chat_id, f"📸 Пожалуйста, отправьте одно или несколько фото для доп. текста №{text_number}")
+                        
+                        # Проверяем вложения в текущем сообщении
+                        if 'attachments' not in message or not message['attachments']:
+                            send_message(chat_id, "❌ Прикрепите фото к сообщению с командой .добфото")
+                            continue
+                            
+                        photos = []
+                        for att in message['attachments']:
+                            if att['type'] == 'photo':
+                                max_size = max(att['photo']['sizes'], key=lambda x: x['width'] * x['height'])
+                                photo_url = max_size['url']
+                                photo_response = requests.get(photo_url)
+                                if photo_response.status_code == 200:
+                                    uploaded = upload_photo_to_vk_from_memory(photo_response.content)
+                                    if uploaded:
+                                        photos.append(uploaded)
+                        
+                        if photos:
+                            idx_str = str(text_idx)
+                            if idx_str not in additional_photos_by_text:
+                                additional_photos_by_text[idx_str] = []
+                            additional_photos_by_text[idx_str].extend(photos)
+                            save_data()
+                            attachment_str = ','.join(photos)
+                            send_message(chat_id, f"✅ Фото успешно добавлены к доп. тексту №{text_number}", attachment=attachment_str)
+                            update_user_stats(user_id, 'osn_photo')
+                        else:
+                            send_message(chat_id, "❌ Не удалось обработать ни одно фото.")
                     except ValueError:
                         send_message(chat_id, "Номер должен быть числом. Пример: .добфото 1")
                     except Exception as e:
                         send_message(chat_id, f"Произошла ошибка при обработке команды: {str(e)}")
-                elif text.startswith('.удфото '):
+                elif text.startswith('.') and text.split()[0] == '.удфото':
                     if chat_id != admin_chat:
                         send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
                         continue
