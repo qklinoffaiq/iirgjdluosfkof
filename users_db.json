@@ -1,0 +1,58 @@
+{
+    "574393629": {
+        "role": "dev",
+        "osn_photo_count": 1,
+        "osn_text_count": 1,
+        "total_messages": 65,
+        "last_message": "2026-04-19 10:39:02 | message"
+    },
+    "488828183": {
+        "role": "admin",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": ""
+    },
+    "672052315": {
+        "role": "user",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": "2026-04-19 10:37:16 | message"
+    },
+    "-232598001": {
+        "role": "user",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": "2026-04-19 09:41:49 | message"
+    },
+    "597064735": {
+        "role": "admin",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": ""
+    },
+    "870478120": {
+        "role": "admin",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": "2026-04-19 10:36:49 | message"
+    },
+    "738733496": {
+        "role": "user",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": "2026-04-19 10:34:14 | message"
+    },
+    "888274461": {
+        "role": "user",
+        "osn_photo_count": 0,
+        "osn_text_count": 0,
+        "total_messages": 0,
+        "last_message": "2026-04-19 10:35:23 | message"
+    }
+}
