@@ -6,7 +6,8 @@ import json
 import os
 import requests
 import config
-from config import MESSAGE_CONFIG, admin_ids, main_photo, group_token, group_id
+from config import MESSAGE_CONFIG, main_photo, group_token, group_id
+admin_ids = []
 
 # Глобальные настройки
 cd_min = config.cd_min
@@ -597,37 +598,76 @@ while True:
 
                 # --- Команда .админ ---
                 elif text.startswith('.') and text.split()[0] == '.админ':
-                    if user_id == 574393629:
-                        target_id = extract_target_user(event)
-                        if not target_id:
-                            send_message(chat_id, "❌ Укажите пользователя: ответом, @ или ссылкой.")
-                            continue
-                        if target_id == user_id:
-                            send_message(chat_id, "❌ Вы не можете снять себе права.")
-                            continue
-                        users = load_users()
-                        user_key = str(target_id)
-                        current_role = users.get(user_key, {}).get('role', 'user')
-                        if current_role == 'admin':
-                            users[user_key]['role'] = 'user'
-                            save_users(users)
-                            try:
-                                user_info = vk.users.get(user_ids=target_id)[0]
-                                full_name = f"{user_info['first_name']} {user_info['last_name']}"
-                                send_message(chat_id, f"❌ Права администратора сняты у [id{target_id}|{full_name}]")
-                            except Exception as e:
-                                send_message(chat_id, f"❌ Права администратора сняты у пользователя {target_id}. Произошла ошибка при получении имени: {e}")
-                        else:
-                            users[user_key]['role'] = 'admin'
-                            save_users(users)
-                            try:
-                                user_info = vk.users.get(user_ids=target_id)[0]
-                                full_name = f"{user_info['first_name']} {user_info['last_name']}"
-                                send_message(chat_id, f"✅ [id{target_id}|{full_name}] назначен(а) администратором.")
-                            except Exception as e:
-                                send_message(chat_id, f"✅ Пользователь {target_id} назначен администратором. Произошла ошибка при получении имени: {e}")
+                    # Проверка прав отправителя
+                    if not has_permission(user_id, 'dev'):
+                        send_message(chat_id, "❌ Доступ запрещён. Только разработчик может выдавать права администратора.")
+                        logging.info(f"Попытка использования команды .админ пользователем {user_id} без прав dev.")
+                        continue
+                    
+                    # Извлечение ID пользователя с помощью универсальной функции
+                    target_id = extract_target_user(event)
+                    if not target_id:
+                        send_message(chat_id, "❌ Укажите пользователя: ответом, @ или ссылкой.")
+                        logging.info(f"Команда .админ: не указан ID пользователя от {user_id}.")
+                        continue
+                    
+                    # Запрет снятия прав с себя
+                    if user_id == target_id:
+                        send_message(chat_id, "❌ Нельзя снимать права администратора с себя через эту команду.")
+                        continue
+                    
+                    # Загружаем текущие данные
+                    users = load_users()
+                    user_key = str(target_id)
+                    
+                    # Проверяем текущую роль
+                    is_admin = users.get(user_key, {}).get('role') == 'admin'
+                    
+                    # Переключаем роль
+                    if is_admin:
+                        # Снимаем права
+                        if target_id in admin_ids:
+                            admin_ids.remove(target_id)
+                        users[user_key]['role'] = 'user'
+                        action = 'remove'
                     else:
-                        send_message(chat_id, "❌ У вас нет прав на выполнение этой команды.")
+                        # Выдаём права
+                        if target_id not in admin_ids:
+                            admin_ids.append(target_id)
+                        users[user_key]['role'] = 'admin'
+                        action = 'add'
+                    
+                    # Сохраняем обновлённые данные
+                    save_users(users)
+                    data['admin_ids'] = admin_ids
+                    try:
+                        with open('data.json', 'w', encoding='utf-8') as f:
+                            json.dump(data, f, ensure_ascii=False, indent=4)
+                    except Exception as e:
+                        logging.error(f"Ошибка сохранения data.json: {e}")
+                        send_message(chat_id, "⚠️ Ошибка сохранения конфигурации.")
+                        continue
+                    
+                    # Получаем имена пользователей
+                    try:
+                        target_info = vk.users.get(user_ids=target_id)[0]
+                        target_name = f"[https://vk.com/id{target_id}|{target_info['first_name']} {target_info['last_name']}]"
+                    except Exception:
+                        target_name = f"[id{target_id}|пользователь {target_id}"
+                    
+                    try:
+                        admin_info = vk.users.get(user_ids=user_id)[0]
+                        admin_name = f"[https://vk.com/id{user_id}|{admin_info['first_name']} {admin_info['last_name']}]"
+                    except Exception:
+                        admin_name = f"[id{user_id}|администратор]"
+                    
+                    # Отправляем кликабельное сообщение
+                    if action == 'add':
+                        send_message(chat_id, f"✅ {admin_name} выдал права администратора пользователю {target_name}.")
+                        logging.info(f"Пользователь {user_id} назначил администратором {target_id}.")
+                    else:
+                        send_message(chat_id, f"❌ {admin_name} снял права администратора с пользователя {target_name}.")
+                        logging.info(f"Пользователь {user_id} снял права администратора с {target_id}.")
 
                 # --- Команда .стата ---
                 elif text.startswith('.') and text.split()[0] == '.стата':
