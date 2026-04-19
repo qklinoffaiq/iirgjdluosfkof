@@ -1,7 +1,7 @@
 from datetime import datetime
 
-group_token = "vk1.a.uXjX4k_KL5OnJHsf5sa1wxeY-EC4hAlbGezjuhI7lFhyB6VPECGS58XIeoPTtnpICMLWNz00yb8orFHUh0jOXmCJetD3KOJPQwckBLJ9ynCwzlQNP5JC0j1N4Yee2qrWu2IjslTnc-lgrq2OfVDfmQgkVQTUR0nImLazws9280jQ5N0d3lnDetTxAzuZan0iSqj5lXfj3L3uweFoyHGf0w"
-group_id = 237303045
+group_token = "vk1.a.8oY5NlLvSlwuq48MpSI35USoS_SutgHPlaQEKLUvL_DF5IBwDfHscqhBhwJ0bqfgTZUbv_t3LUP2GShDeP4BjwXizWLElkmGtXJh_rBJBs8zvLnAx0YrQOFPnsjeFnIPQi3bo3AR8hD_TE7F3WHCtxkIvCHFdl4DHVnHya6DBKnY3DrtrYta1q2Xua6OyTw9ZZZEpMCaVQ2WkqHWHflO_g"
+group_id = 237741528
 cd_min = 10
 interval_sec = 0.01
 additional_texts = []
