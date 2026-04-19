@@ -1164,6 +1164,8 @@ while True:
                         send_message(chat_id, f"📸 Пожалуйста, отправьте одно или несколько фото для доп. текста №{text_number}")
                     except ValueError:
                         send_message(chat_id, "Номер должен быть числом. Пример: .добфото 1")
+                    except Exception as e:
+                        send_message(chat_id, f"Произошла ошибка при обработке команды: {str(e)}")
                 elif text.startswith('.удфото '):
                     if chat_id != admin_chat:
                         send_message(chat_id, "❌ Эта команда доступна только в админ-чате.")
@@ -1194,41 +1196,32 @@ while True:
                     except ValueError:
                         send_message(chat_id, "Номер должен быть числом. Пример: .удфото 1")
                 # Проверка фото от пользователей, ожидающих добавления
-                elif user_id in photo_wait_queue:
+                elif 'attachments' in message and message['attachments'] and user_id in photo_wait_queue:
                     wait_data = photo_wait_queue[user_id]
                     if time.time() > wait_data['expires']:
                         del photo_wait_queue[user_id]
                         send_message(chat_id, "⏳ Время ожидания фото истекло. Отменено.")
                     else:
-                        if 'attachments' in message and message['attachments']:
-                            photos = []
-                            # Храним фото в памяти как байты
-                            for att in message['attachments']:
-                                if att['type'] == 'photo':
-                                    # Берем фото максимального размера
-                                    max_size = max(att['photo']['sizes'], key=lambda x: x['width'] * x['height'])
-                                    photo_url = max_size['url']
-                                    
-                                    # Скачиваем фото в память
-                                    photo_response = requests.get(photo_url)
-                                    if photo_response.status_code == 200:
-                                        # Загружаем фото напрямую из памяти
-                                        uploaded = upload_photo_to_vk_from_memory(photo_response.content)
-                                        if uploaded:
-                                            photos.append(uploaded)
-                                    
-                            if photos:
-                                text_idx = wait_data['text_idx']
-                                if text_idx not in additional_photos_by_text:
-                                    additional_photos_by_text[text_idx] = []
-                                additional_photos_by_text[text_idx].extend(photos)
-                                save_data()
-                                # Отправляем подтверждение с вложением
-                                attachment_str = ','.join(photos)
-                                send_message(chat_id, f"✅ Фото успешно добавлены к доп. тексту №{int(text_idx) + 1}", attachment=attachment_str)
-                            else:
-                                send_message(chat_id, "Не удалось загрузить фото. Попробуйте еще раз.")
-                        # Удаляем из очереди в любом случае после обработки
+                        photos = []
+                        for att in message['attachments']:
+                            if att['type'] == 'photo':
+                                max_size = max(att['photo']['sizes'], key=lambda x: x['width'] * x['height'])
+                                photo_url = max_size['url']
+                                photo_response = requests.get(photo_url)
+                                if photo_response.status_code == 200:
+                                    uploaded = upload_photo_to_vk_from_memory(photo_response.content)
+                                    if uploaded:
+                                        photos.append(uploaded)
+                        if photos:
+                            text_idx = wait_data['text_idx']
+                            if text_idx not in additional_photos_by_text:
+                                additional_photos_by_text[text_idx] = []
+                            additional_photos_by_text[text_idx].extend(photos)
+                            save_data()
+                            attachment_str = ','.join(photos)
+                            send_message(chat_id, f"✅ Фото успешно добавлены к доп. тексту №{int(text_idx) + 1}", attachment=attachment_str)
+                        else:
+                            send_message(chat_id, "❌ Не удалось обработать ни одно фото.")
                         del photo_wait_queue[user_id]
     except Exception as e:
         print(f'[!] Произошла ошибка: {e}')
